@@ -23,6 +23,8 @@ namespace Circuitos.Controllers
             return View(await voltas.ToListAsync());
         }
 
+        // === CONSULTA 1 ===
+        // Consulta usando dados de DUAS CLASSES relacionadas (Carro + Circuito)
         public async Task<IActionResult> FiltrarVoltasDinamico(string pais, int potenciaMinima)
         {
             var voltasFiltradas = await _context.Voltas
@@ -32,10 +34,46 @@ namespace Circuitos.Controllers
                 .OrderBy(v => v.Tempo)
                 .ToListAsync();
 
-            return View("Index", voltasFiltradas); // Ou pode retornar uma view separada se quiser
+            return View("Index", voltasFiltradas);
         }
 
-        public IActionResult Create()
+        public async Task<IActionResult> CarrosMaisUtilizados()
+        {
+            var resultado = await _context.Voltas
+                .Include(v => v.Carro)
+                .GroupBy(v => new { v.CarroID, v.Carro.Modelo, v.Carro.Marca })
+                .Select(g => new CarroUtilizacao
+                {
+                    Modelo = g.Key.Marca + " " + g.Key.Modelo,
+                    QuantidadeVoltas = g.Count()
+                })
+                .OrderByDescending(r => r.QuantidadeVoltas)
+                .ToListAsync();
+
+            return View(resultado);
+        }
+
+        // === CONSULTA 3 ===
+        // Consulta com WHERE + HAVING (filtro principal + filtro de grupo)
+        public async Task<IActionResult> PaisesComMaisDe3Voltas()
+        {
+            var resultado = await _context.Voltas
+                .Include(v => v.Circuito)
+                .GroupBy(v => v.Circuito.Pais)
+                .Where(g => g.Count() > 3) // HAVING
+                .Select(g => new PaisVoltas
+                {
+                    Pais = g.Key,
+                    TotalVoltas = g.Count()
+                })
+                .ToListAsync();
+
+            return View(resultado); 
+        }
+    
+
+
+public IActionResult Create()
         {
             ViewData["CarroID"] = new SelectList(_context.Carros, "CarroID", "Modelo");
             ViewData["CircuitoID"] = new SelectList(_context.Circuitos, "CircuitoID", "Nome");
@@ -48,7 +86,12 @@ namespace Circuitos.Controllers
         {
             try
             {
-               
+                if (ModelState.IsValid)
+                {
+                    _context.Add(volta);
+                    await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Index));
+                }
             }
             catch (Exception)
             {
